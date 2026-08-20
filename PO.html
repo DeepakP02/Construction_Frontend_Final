@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Purchase Order</title>
+
+</head>
+
+<body style="margin:0;padding:0;background-color:#F3F4F6;">
+
+<center style="width:100%;background:#F3F4F6;">
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F3F4F6">
+
+<tr>
+
+<td align="center" style="padding:35px 15px;">
+
+<table role="presentation" width="680" cellpadding="0" cellspacing="0" border="0" style="width:680px;max-width:680px;background:#ffffff;border:1px solid #E5E7EB;">
+
+<!-- HEADER -->
+
+<tr>
+
+<td bgcolor="#2563EB" style="padding:16px 28px;">
+
+<img src="https://i.ibb.co/5WQqd9tm/1000127811-1.png" alt="Kaal Construction" width="115" border="0" style="display:block;width:115px;max-width:115px;height:auto;border:0;outline:none;text-decoration:none;">
+
+</td>
+
+</tr>
+
+<!-- BODY -->
+
+<tr>
+
+<td style="padding:40px;font-family:Arial,Helvetica,sans-serif;color:#333333;">
+
+<h2 style="margin:0 0 20px;font-size:30px;font-weight:bold;color:#111827;">
+
+Purchase Order
+
+</h2>
+
+<p style="margin:0 0 18px;font-size:16px;line-height:28px;color:#4B5563;">
+
+Hello
+<strong>{{vendorName}}</strong>,
+
+</p>
+
+<p
+style="
+margin:0;
+font-size:16px;
+line-height:28px;
+color:#4B5563;
+">
+
+We are pleased to share Purchase Order
+
+<strong>#{{poNumber}}</strong>
+
+for the project
+
+<strong>{{projectName}}</strong>.
+
+Please review the order details below.
+
+</p>
+
+<br><br>
+
+<!-- DETAILS CARD -->
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F9FAFB;border:1px solid #E5E7EB;">
+
+<tr>
+
+<td style="padding:25px;">
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:Arial,Helvetica,sans-serif;font-size:15px;">
+
+<tr>
+
+<td
+style="
+padding:12px 0;
+border-bottom:1px solid #E5E7EB;
+color:#6B7280;
+">
+
+Purchase Order No.
+
+</td>
+
+<td
+align="right"
+style="
+padding:12px 0;
+border-bottom:1px solid #E5E7EB;
+">
+
+<strong>#{{poNumber}}</strong>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td
+style="
+padding:12px 0;
+border-bottom:1px solid #E5E7EB;
+color:#6B7280;
+">
+
+Issue Date
+
+</td>
+
+<td
+align="right"
+style="
+padding:12px 0;
+border-bottom:1px solid #E5E7EB;
+">
+
+<strong>{{date}}</strong>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td
+style="
+padding:12px 0;
+border-bottom:1px solid #E5E7EB;
+color:#6B7280;
+">
+
+Delivery Date
+
+</td>
+
+<td
+align="right"
+style="
+padding:12px 0;
+border-bottom:1px solid #E5E7EB;
+">
+
+<strong>{{deliveryDate}}</strong>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="padding:18px 0 0;font-size:18px;font-weight:bold;">
+
+Total Amount
+
+</td>
+
+<td align="right" style="padding:18px 0 0;font-size:26px;font-weight:bold;color:#16A34A;">
+
+{{currency}}{{totalAmount}}
+
+</td>
+
+</tr>
+
+</table>
+
+</td>
+
+</tr>
+
+</table>
+
+<br>
+
+<p
+style="
+margin:0;
+font-size:16px;
+line-height:28px;
+color:#4B5563;
+">
+
+Kindly review this Purchase Order.
+
+If everything is in order, please acknowledge receipt and proceed according to the agreed terms.
+
+</p>
+
+<br>
+
+<hr style="border:none;border-top:1px solid #E5E7EB;margin:30px 0;">
+
+<!-- DOWNLOAD BUTTON STARTS BELOW -->
+ <!-- BUTTON -->
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+
+<tr>
+
+<td align="center">
+
+<!--[if mso]>
+
+<v:roundrect
+xmlns:v="urn:schemas-microsoft-com:vml"
+xmlns:w="urn:schemas-microsoft-com:office:word"
+href="{{viewPoLink}}"
+style="height:52px;v-text-anchor:middle;width:260px;"
+arcsize="8%"
+stroke="f"
+fillcolor="#2563EB">
+
+<w:anchorlock/>
+
+<center
+style="
+color:#ffffff;
+font-family:Arial,Helvetica,sans-serif;
+font-size:17px;
+font-weight:bold;
+">
+
+Download PO (PDF)
+
+</center>
+
+</v:roundrect>
+
+<![endif]-->
+
+<!--[if !mso]><!-- -->
+
+<a
+href="{{viewPoLink}}"
+target="_blank"
+style="
+background:#2563EB;
+border:1px solid #2563EB;
+color:#ffffff;
+display:inline-block;
+font-family:Arial,Helvetica,sans-serif;
+font-size:17px;
+font-weight:bold;
+text-decoration:none;
+line-height:52px;
+width:260px;
+text-align:center;
+-webkit-text-size-adjust:none;
+">
+
+Download PO (PDF)
+
+</a>
+
+<!--<![endif]-->
+
+</td>
+
+</tr>
+
+</table>
+
+<br>
+
+<p style="margin:0;font-size:16px;line-height:28px;color:#4B5563;text-align:center;">
+
+Thank you for your continued partnership.
+
+</p>
+
+<p style="margin:15px 0 0;font-size:16px;line-height:28px;color:#4B5563;text-align:center;">
+
+Please download the Purchase Order PDF using the button above.
+
+If you have any questions or require clarification,
+our Procurement Team will be happy to assist you.
+
+</p>
+
+<br><br>
+
+<table
+role="presentation"
+width="100%"
+cellpadding="0"
+cellspacing="0"
+border="0">
+
+<tr>
+
+<td style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:28px;color:#374151;">
+
+Regards,
+
+<br><br>
+
+<strong>Procurement Team</strong>
+
+</td>
+
+</tr>
+
+</table>
+
+</td>
+
+</tr>
+
+<!-- FOOTER -->
+
+<tr>
+
+<td bgcolor="#F9FAFB" style="padding:30px;border-top:1px solid #E5E7EB;font-family:Arial,Helvetica,sans-serif;text-align:center;">
+
+<p style="margin:0;font-size:11px;line-height:18px;color:#9CA3AF;">
+
+This Purchase Order was sent automatically by our procurement system.
+
+Please do not reply directly to this email.
+
+</p>
+
+</td>
+
+</tr>
+
+</table>
+
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+</body>
+
+</html>
