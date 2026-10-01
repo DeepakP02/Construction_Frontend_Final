@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
     Send, Search, Paperclip, Smile, MessageSquare, X, Loader, 
     Download, ChevronLeft, AlertCircle, Users, User, 
@@ -78,6 +78,10 @@ const Chat = () => {
     const [userSearchResults, setUserSearchResults] = useState([]);
     const [isSearchingUsers, setIsSearchingUsers] = useState(false);
     const [isStartingDirect, setIsStartingDirect] = useState(false);
+    const directoryCacheRef = useRef([]);
+    const isPrimaryAvailableRef = useRef(null);
+    const isFetchingDirectoryRef = useRef(false);
+    const searchSeqRef = useRef(0);
 
     const commonEmojis = [
         '😊', '😂', '👍', '🙏', '🔥', '❤️', '👏', '🙌',
@@ -457,100 +461,182 @@ const Chat = () => {
         );
     }, [groupParticipants, participantSearch]);
 
-    // Debounced Hierarchy Users Search (for Private Messaging)
+    const deduplicateById = useCallback((userList) => {
+        const seen = new Set();
+        const result = [];
+        for (const u of (userList || [])) {
+            const uid = String(u._id || u.id || '');
+            if (uid && !seen.has(uid)) {
+                seen.add(uid);
+                result.push({
+                    ...u,
+                    _id: uid,
+                    id: uid
+                });
+            }
+        }
+        return result;
+    }, []);
+
+    const loadDirectoryUsers = useCallback(async (force = false) => {
+        if (!force && directoryCacheRef.current.length > 0) {
+            return directoryCacheRef.current;
+        }
+        if (isFetchingDirectoryRef.current) return directoryCacheRef.current;
+        isFetchingDirectoryRef.current = true;
+
+        try {
+            if (isPrimaryAvailableRef.current !== false) {
+                try {
+                    const res = await api.get('/chat/hierarchy-users?limit=100');
+                    if (Array.isArray(res.data?.users) && res.data.users.length > 0) {
+                        isPrimaryAvailableRef.current = true;
+                        directoryCacheRef.current = deduplicateById(res.data.users);
+                        return directoryCacheRef.current;
+                    }
+                } catch (e) {
+                    if (e.response?.status === 400 || e.response?.status === 404) {
+                        isPrimaryAvailableRef.current = false;
+                    }
+                }
+            }
+
+            const [chatUsersRes, authUsersRes] = await Promise.allSettled([
+                api.get('/chat/users'),
+                api.get('/auth/users')
+            ]);
+
+            const chatList = chatUsersRes.status === 'fulfilled' && Array.isArray(chatUsersRes.value?.data) ? chatUsersRes.value.data : [];
+            const authList = authUsersRes.status === 'fulfilled' && Array.isArray(authUsersRes.value?.data) ? authUsersRes.value.data : [];
+
+            const phoneMap = {};
+            const avatarMap = {};
+            authList.forEach(u => {
+                const uid = String(u._id || u.id);
+                if (u.phone) phoneMap[uid] = u.phone;
+                if (u.avatar) avatarMap[uid] = u.avatar;
+            });
+
+            const candidatePool = chatList.length > 0 ? chatList : authList;
+            const currentUserId = String(user?._id || user?.id || '');
+
+            const mapped = candidatePool
+                .filter(u => {
+                    const uid = String(u._id || u.id);
+                    return !currentUserId || uid !== currentUserId;
+                })
+                .map(u => {
+                    const uid = String(u._id || u.id);
+                    return {
+                        _id: uid,
+                        id: uid,
+                        fullName: u.fullName || 'User',
+                        email: u.email || '',
+                        role: u.role || 'WORKER',
+                        avatar: u.avatar || avatarMap[uid] || null,
+                        phone: u.phone || phoneMap[uid] || null,
+                        sharedProjects: u.sharedProjects || []
+                    };
+                });
+
+            directoryCacheRef.current = deduplicateById(mapped);
+            return directoryCacheRef.current;
+        } catch (err) {
+            console.error('[loadDirectoryUsers] Error:', err);
+            return directoryCacheRef.current;
+        } finally {
+            isFetchingDirectoryRef.current = false;
+        }
+    }, [user, deduplicateById]);
+
+    // Preload directory contacts on startup or when switching to DIRECT tab
+    useEffect(() => {
+        if (user?._id || user?.id) {
+            loadDirectoryUsers();
+        }
+    }, [user, loadDirectoryUsers]);
+
+    useEffect(() => {
+        if (activeTab === 'DIRECT') {
+            loadDirectoryUsers();
+        }
+    }, [activeTab, loadDirectoryUsers]);
+
+    // Instant Hierarchy Users Search with sequence tracking and zero-latency in-memory cache
     useEffect(() => {
         if (activeTab !== 'DIRECT' || !userSearchQuery.trim()) {
             setUserSearchResults([]);
+            setIsSearchingUsers(false);
             return;
         }
 
-        const timer = setTimeout(async () => {
+        const currentSeq = ++searchSeqRef.current;
+        const qTrim = userSearchQuery.trim();
+        const qLower = qTrim.toLowerCase();
+        const currentUserId = String(user?._id || user?.id || '');
+
+        // 1. Immediately drop non-matching stale contacts so they never linger on screen
+        setUserSearchResults(prev => prev.filter(u => {
+            const name = (u.fullName || '').toLowerCase();
+            const email = (u.email || '').toLowerCase();
+            const role = (u.role || '').toLowerCase();
+            const phone = (u.phone || '').toLowerCase();
+            return name.includes(qLower) || email.includes(qLower) || role.includes(qLower) || phone.includes(qLower);
+        }));
+
+        // 2. Instant client-side search across preloaded contacts (< 1ms execution time)
+        if (directoryCacheRef.current.length > 0) {
+            const instantFiltered = directoryCacheRef.current.filter(u => {
+                const uid = String(u._id || u.id);
+                if (currentUserId && uid === currentUserId) return false;
+                if (!qLower) return true;
+                const name = (u.fullName || '').toLowerCase();
+                const email = (u.email || '').toLowerCase();
+                const role = (u.role || '').toLowerCase();
+                const phone = (u.phone || '').toLowerCase();
+                return name.includes(qLower) || email.includes(qLower) || role.includes(qLower) || phone.includes(qLower);
+            });
+            setUserSearchResults(deduplicateById(instantFiltered));
+            setIsSearchingUsers(false);
+        } else {
             setIsSearchingUsers(true);
-            const qTrim = userSearchQuery.trim();
-            const qLower = qTrim.toLowerCase();
-            let users = [];
+        }
 
+        // 3. Background ensure/refresh if cache was empty or for fresh data
+        let isCancelled = false;
+        const executeSearch = async () => {
             try {
-                const res = await api.get(`/chat/hierarchy-users?q=${encodeURIComponent(qTrim)}`);
-                if (Array.isArray(res.data?.users)) {
-                    users = res.data.users;
+                if (directoryCacheRef.current.length === 0) {
+                    await loadDirectoryUsers();
                 }
-            } catch (err) {
-                console.warn('[Chat] Primary hierarchy endpoint unavailable, falling back:', err.response?.data?.message || err.message);
-            }
-
-            if (users.length === 0) {
-                // Resilient fallback for environments where /chat/hierarchy-users is shadowed by /:roomId
-                try {
-                    const [chatUsersRes, authUsersRes] = await Promise.allSettled([
-                        api.get('/chat/users'),
-                        api.get('/auth/users')
-                    ]);
-
-                    const chatList = chatUsersRes.status === 'fulfilled' && Array.isArray(chatUsersRes.value?.data) ? chatUsersRes.value.data : [];
-                    const authList = authUsersRes.status === 'fulfilled' && Array.isArray(authUsersRes.value?.data) ? authUsersRes.value.data : [];
-
-                    const phoneMap = {};
-                    const avatarMap = {};
-                    authList.forEach(u => {
-                        const uid = String(u._id || u.id);
-                        if (u.phone) phoneMap[uid] = u.phone;
-                        if (u.avatar) avatarMap[uid] = u.avatar;
-                    });
-
-                    const candidatePool = chatList.length > 0 ? chatList : authList;
-                    const currentUserId = String(user?._id || user?.id || '');
-
-                    const filtered = candidatePool.filter(u => {
+                if (!isCancelled && searchSeqRef.current === currentSeq) {
+                    const filtered = directoryCacheRef.current.filter(u => {
                         const uid = String(u._id || u.id);
                         if (currentUserId && uid === currentUserId) return false;
                         if (!qLower) return true;
                         const name = (u.fullName || '').toLowerCase();
                         const email = (u.email || '').toLowerCase();
                         const role = (u.role || '').toLowerCase();
-                        const phone = (u.phone || phoneMap[uid] || '').toLowerCase();
+                        const phone = (u.phone || '').toLowerCase();
                         return name.includes(qLower) || email.includes(qLower) || role.includes(qLower) || phone.includes(qLower);
                     });
-
-                    users = filtered.map(u => {
-                        const uid = String(u._id || u.id);
-                        return {
-                            _id: uid,
-                            id: uid,
-                            fullName: u.fullName || 'User',
-                            email: u.email || '',
-                            role: u.role || 'WORKER',
-                            avatar: u.avatar || avatarMap[uid] || null,
-                            phone: u.phone || phoneMap[uid] || null,
-                            sharedProjects: u.sharedProjects || []
-                        };
-                    });
-                } catch (fallbackErr) {
-                    console.error('[Chat] Directory search fallback failed:', fallbackErr);
+                    setUserSearchResults(deduplicateById(filtered));
+                }
+            } catch (err) {
+                console.error('[Chat] Directory search error:', err);
+            } finally {
+                if (!isCancelled && searchSeqRef.current === currentSeq) {
+                    setIsSearchingUsers(false);
                 }
             }
+        };
 
-            // Strict deduplication by user _id only, preserving separate accounts with distinct IDs
-            const seenUserIds = new Set();
-            const deduplicated = [];
-            for (const u of users) {
-                const uid = String(u._id || u.id || '');
-                if (uid && !seenUserIds.has(uid)) {
-                    seenUserIds.add(uid);
-                    deduplicated.push({
-                        ...u,
-                        _id: uid,
-                        id: uid
-                    });
-                }
-            }
+        executeSearch();
 
-            setUserSearchResults(deduplicated);
-            setIsSearchingUsers(false);
-        }, 250);
-
-        return () => clearTimeout(timer);
-    }, [userSearchQuery, activeTab, user]);
+        return () => {
+            isCancelled = true;
+        };
+    }, [userSearchQuery, activeTab, user, loadDirectoryUsers, deduplicateById]);
 
     const handleStartDirectChat = async (targetUser) => {
         try {
