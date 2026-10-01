@@ -471,11 +471,12 @@ const Chat = () => {
                 setUserSearchResults(res.data?.users || []);
             } catch (err) {
                 console.error('Error searching hierarchy contacts:', err);
-                toast.error('Failed to search directory contacts');
+                const errMsg = err.response?.data?.message || 'Failed to search directory contacts';
+                toast.error(errMsg);
             } finally {
                 setIsSearchingUsers(false);
             }
-        }, 300);
+        }, 250);
 
         return () => clearTimeout(timer);
     }, [userSearchQuery, activeTab]);
@@ -824,7 +825,7 @@ const Chat = () => {
                                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
                                 <input 
                                     type="text" 
-                                    placeholder="Search hierarchy contacts..." 
+                                    placeholder="Search contacts by name, role, email, phone..." 
                                     value={userSearchQuery} 
                                     onChange={(e) => setUserSearchQuery(e.target.value)} 
                                     className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500" 
@@ -832,7 +833,7 @@ const Chat = () => {
                                 {userSearchQuery && (
                                     <button 
                                         onClick={() => setUserSearchQuery('')}
-                                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
                                     >
                                         <X size={14} />
                                     </button>
@@ -848,7 +849,7 @@ const Chat = () => {
                         /* Direct Hierarchy Contact Search Results */
                         <div className="p-2 space-y-2">
                             <div className="px-3 py-1.5 text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center justify-between">
-                                <span>Hierarchy Contacts</span>
+                                <span>Directory Contacts</span>
                                 {isSearchingUsers && <Loader size={12} className="animate-spin text-blue-600" />}
                             </div>
 
@@ -862,9 +863,13 @@ const Chat = () => {
                                             className="p-3 bg-white rounded-xl border border-slate-100 hover:border-blue-300 hover:shadow-sm cursor-pointer transition-all flex items-center justify-between gap-3 group"
                                         >
                                             <div className="flex items-center gap-3 min-w-0">
-                                                <div className="relative">
-                                                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 font-black flex items-center justify-center text-sm border border-blue-100">
-                                                        {u.fullName?.[0] || 'U'}
+                                                <div className="relative shrink-0">
+                                                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 font-black flex items-center justify-center text-sm border border-blue-100 overflow-hidden shadow-xs">
+                                                        {u.avatar ? (
+                                                            <img src={getServerUrl(u.avatar)} alt={u.fullName} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            u.fullName?.[0] || 'U'
+                                                        )}
                                                     </div>
                                                     <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${u.isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                                                 </div>
@@ -875,21 +880,22 @@ const Chat = () => {
                                                             {roleBadge.label}
                                                         </span>
                                                     </div>
-                                                    {u.sharedProjects?.length > 0 ? (
-                                                        <p className="text-[10px] text-slate-400 truncate mt-0.5">
-                                                            Shared: {u.sharedProjects.map(p => p.title).join(', ')}
-                                                        </p>
-                                                    ) : (
-                                                        <p className="text-[10px] text-slate-400 truncate mt-0.5">
-                                                            {u.email}
+                                                    {u.sharedProjects?.length > 0 && (
+                                                        <p className="text-[10px] text-blue-600 font-semibold truncate mt-0.5">
+                                                            Projects: {u.sharedProjects.map(p => typeof p === 'string' ? p : (p.name || p.title)).join(', ')}
                                                         </p>
                                                     )}
+                                                    <p className="text-[10px] text-slate-400 truncate mt-0.5 flex items-center gap-1.5">
+                                                        {u.email && <span>{u.email}</span>}
+                                                        {u.email && u.phone && <span>•</span>}
+                                                        {u.phone && <span className="text-slate-600 font-medium">{u.phone}</span>}
+                                                    </p>
                                                 </div>
                                             </div>
                                             <button 
                                                 disabled={isStartingDirect}
-                                                className="shrink-0 p-2 bg-blue-50 group-hover:bg-blue-600 text-blue-600 group-hover:text-white rounded-lg transition-colors"
-                                                title="Open conversation"
+                                                className="shrink-0 p-2 bg-blue-50 group-hover:bg-blue-600 text-blue-600 group-hover:text-white rounded-lg transition-colors cursor-pointer"
+                                                title="Start private conversation"
                                             >
                                                 <UserPlus size={14} />
                                             </button>
