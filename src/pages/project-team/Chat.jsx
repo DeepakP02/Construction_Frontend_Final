@@ -461,22 +461,38 @@ const Chat = () => {
         );
     }, [groupParticipants, participantSearch]);
 
+    const CANONICAL_USER_ALIASES = useMemo(() => ({
+        '6a5b33f89845db87c7a92641': '69cda4ad4a2742699702e4c6',
+        '6aae432ece4d83703ab0c45f': '69cda4ad4a2742699702e4c6'
+    }), []);
+
     const deduplicateById = useCallback((userList) => {
         const seen = new Set();
         const result = [];
+        const userById = new Map();
         for (const u of (userList || [])) {
-            const uid = String(u._id || u.id || '');
-            if (uid && !seen.has(uid)) {
-                seen.add(uid);
+            const rawId = String(u?._id || u?.id || '');
+            if (rawId) userById.set(rawId, u);
+        }
+
+        for (const u of (userList || [])) {
+            const rawId = String(u?._id || u?.id || '');
+            if (!rawId) continue;
+            const canonId = CANONICAL_USER_ALIASES[rawId] || rawId;
+            if (!seen.has(canonId)) {
+                seen.add(canonId);
+                const canonicalDoc = userById.get(canonId) || u;
                 result.push({
-                    ...u,
-                    _id: uid,
-                    id: uid
+                    ...canonicalDoc,
+                    _id: canonId,
+                    id: canonId,
+                    role: canonicalDoc.role || u.role || 'WORKER',
+                    email: canonicalDoc.email || u.email || ''
                 });
             }
         }
         return result;
-    }, []);
+    }, [CANONICAL_USER_ALIASES]);
 
     const loadDirectoryUsers = useCallback(async (force = false) => {
         if (!force && directoryCacheRef.current.length > 0) {
@@ -641,7 +657,8 @@ const Chat = () => {
     const handleStartDirectChat = async (targetUser) => {
         try {
             setIsStartingDirect(true);
-            const targetId = String(targetUser._id || targetUser.id || '');
+            const rawTargetId = String(targetUser._id || targetUser.id || '');
+            const targetId = CANONICAL_USER_ALIASES[rawTargetId] || rawTargetId;
             if (!targetId) return;
             const res = await api.post('/chat/direct', { targetUserId: targetId });
             const directRoom = res.data;
