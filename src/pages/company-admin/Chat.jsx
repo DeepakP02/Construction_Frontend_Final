@@ -466,20 +466,76 @@ const Chat = () => {
 
         const timer = setTimeout(async () => {
             setIsSearchingUsers(true);
+            const qTrim = userSearchQuery.trim();
+            const qLower = qTrim.toLowerCase();
+            let users = [];
+
             try {
-                const res = await api.get(`/chat/hierarchy-users?q=${encodeURIComponent(userSearchQuery.trim())}`);
-                setUserSearchResults(res.data?.users || []);
+                const res = await api.get(`/chat/hierarchy-users?q=${encodeURIComponent(qTrim)}`);
+                if (Array.isArray(res.data?.users)) {
+                    users = res.data.users;
+                }
             } catch (err) {
-                console.error('Error searching hierarchy contacts:', err);
-                const errMsg = err.response?.data?.message || 'Failed to search directory contacts';
-                toast.error(errMsg);
-            } finally {
-                setIsSearchingUsers(false);
+                console.warn('[Chat] Primary hierarchy endpoint unavailable, falling back:', err.response?.data?.message || err.message);
             }
+
+            if (users.length === 0) {
+                // Resilient fallback for environments where /chat/hierarchy-users is shadowed by /:roomId
+                try {
+                    const [chatUsersRes, authUsersRes] = await Promise.allSettled([
+                        api.get('/chat/users'),
+                        api.get('/auth/users')
+                    ]);
+
+                    const chatList = chatUsersRes.status === 'fulfilled' && Array.isArray(chatUsersRes.value?.data) ? chatUsersRes.value.data : [];
+                    const authList = authUsersRes.status === 'fulfilled' && Array.isArray(authUsersRes.value?.data) ? authUsersRes.value.data : [];
+
+                    const phoneMap = {};
+                    const avatarMap = {};
+                    authList.forEach(u => {
+                        const uid = String(u._id || u.id);
+                        if (u.phone) phoneMap[uid] = u.phone;
+                        if (u.avatar) avatarMap[uid] = u.avatar;
+                    });
+
+                    const candidatePool = chatList.length > 0 ? chatList : authList;
+                    const currentUserId = String(user?._id || user?.id || '');
+
+                    const filtered = candidatePool.filter(u => {
+                        const uid = String(u._id || u.id);
+                        if (currentUserId && uid === currentUserId) return false;
+                        if (!qLower) return true;
+                        const name = (u.fullName || '').toLowerCase();
+                        const email = (u.email || '').toLowerCase();
+                        const role = (u.role || '').toLowerCase();
+                        const phone = (u.phone || phoneMap[uid] || '').toLowerCase();
+                        return name.includes(qLower) || email.includes(qLower) || role.includes(qLower) || phone.includes(qLower);
+                    });
+
+                    users = filtered.map(u => {
+                        const uid = String(u._id || u.id);
+                        return {
+                            _id: uid,
+                            id: uid,
+                            fullName: u.fullName || 'User',
+                            email: u.email || '',
+                            role: u.role || 'WORKER',
+                            avatar: u.avatar || avatarMap[uid] || null,
+                            phone: u.phone || phoneMap[uid] || null,
+                            sharedProjects: u.sharedProjects || []
+                        };
+                    });
+                } catch (fallbackErr) {
+                    console.error('[Chat] Directory search fallback failed:', fallbackErr);
+                }
+            }
+
+            setUserSearchResults(users);
+            setIsSearchingUsers(false);
         }, 250);
 
         return () => clearTimeout(timer);
-    }, [userSearchQuery, activeTab]);
+    }, [userSearchQuery, activeTab, user]);
 
     const handleStartDirectChat = async (targetUser) => {
         try {
