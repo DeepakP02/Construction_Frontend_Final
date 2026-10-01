@@ -34,6 +34,11 @@ const getRoleBadgeStyle = (role) => {
     }
 };
 
+const CANONICAL_USER_ALIASES = {
+    '6a5b33f89845db87c7a92641': '69cda4ad4a2742699702e4c6',
+    '6aae432ece4d83703ab0c45f': '69cda4ad4a2742699702e4c6'
+};
+
 const Chat = () => {
     const { user, socket } = useAuth();
     const [activeTab, setActiveTab] = useState('PROJECT_GROUP'); // 'PROJECT_GROUP' | 'DIRECT'
@@ -136,6 +141,14 @@ const Chat = () => {
             const currentActiveRoom = activeRoomRef.current;
             const activeId = currentActiveRoom ? String(currentActiveRoom.id || currentActiveRoom._id || '') : '';
 
+            const senderId = String(payload.sender?._id || payload.sender?.id || payload.sender || '');
+            const currentUserId = String(user?._id || user?.id || '');
+            const isFromMe = senderId && (
+                senderId === currentUserId ||
+                (CANONICAL_USER_ALIASES[senderId] && CANONICAL_USER_ALIASES[senderId] === currentUserId) ||
+                (CANONICAL_USER_ALIASES[currentUserId] && CANONICAL_USER_ALIASES[currentUserId] === senderId)
+            );
+
             // Update rooms preview list
             setRooms(prev => {
                 const currentRooms = Array.isArray(prev) ? prev : [];
@@ -146,7 +159,12 @@ const Chat = () => {
                 }
 
                 const room = { ...currentRooms[roomIndex] };
-                room.unreadCount = activeId === payloadRoomId ? 0 : (room.unreadCount || 0) + 1;
+                if (activeId === payloadRoomId) {
+                    room.unreadCount = 0;
+                } else if (!isFromMe) {
+                    room.unreadCount = (room.unreadCount || 0) + 1;
+                }
+
                 room.lastMessage = {
                     text: payload.message,
                     sender: payload.sender?.fullName || 'Colleague',
@@ -184,7 +202,6 @@ const Chat = () => {
                     }
 
                     // 3. Fallback: If message is from me and matches a pending optimistic message with identical text
-                    const isFromMe = String(payload.sender?._id || payload.sender) === String(user?._id);
                     if (isFromMe) {
                         const pendingIndex = prev.findIndex(m => m.pending && m.text === payload.message);
                         if (pendingIndex !== -1) {
@@ -213,22 +230,25 @@ const Chat = () => {
                         isMe: isFromMe
                     }];
                 });
-                const isFromMe = String(payload.sender?._id || payload.sender) === String(user?._id);
                 if (!isFromMe) {
                     playSound('MESSAGE_RECEIVED');
                 }
                 api.put(`/chat/mark-read/${payloadRoomId}`).catch(() => {});
             } else {
-                const isFromMe = String(payload.sender?._id || payload.sender) === String(user?._id);
                 if (!isFromMe) {
                     playSound('NOTIFICATION');
                 }
             }
         };
 
+        const handleUnreadCountUpdated = () => {
+            fetchRooms().catch(() => {});
+        };
+
         socket.on('connect', handleConnect);
         socket.on('new_message', handleNewMessage);
         socket.on('online_users_count', handleOnlineCount);
+        socket.on('unread_count_updated', handleUnreadCountUpdated);
 
         if (socket.connected) handleConnect();
 
@@ -236,6 +256,7 @@ const Chat = () => {
             socket.off('connect', handleConnect);
             socket.off('new_message', handleNewMessage);
             socket.off('online_users_count', handleOnlineCount);
+            socket.off('unread_count_updated', handleUnreadCountUpdated);
         };
     }, [user?._id, socket]);
 
