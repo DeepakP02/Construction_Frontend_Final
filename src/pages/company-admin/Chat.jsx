@@ -530,7 +530,22 @@ const Chat = () => {
                 }
             }
 
-            setUserSearchResults(users);
+            // Strict deduplication by user _id only, preserving separate accounts with distinct IDs
+            const seenUserIds = new Set();
+            const deduplicated = [];
+            for (const u of users) {
+                const uid = String(u._id || u.id || '');
+                if (uid && !seenUserIds.has(uid)) {
+                    seenUserIds.add(uid);
+                    deduplicated.push({
+                        ...u,
+                        _id: uid,
+                        id: uid
+                    });
+                }
+            }
+
+            setUserSearchResults(deduplicated);
             setIsSearchingUsers(false);
         }, 250);
 
@@ -540,7 +555,9 @@ const Chat = () => {
     const handleStartDirectChat = async (targetUser) => {
         try {
             setIsStartingDirect(true);
-            const res = await api.post('/chat/direct', { targetUserId: targetUser._id });
+            const targetId = String(targetUser._id || targetUser.id || '');
+            if (!targetId) return;
+            const res = await api.post('/chat/direct', { targetUserId: targetId });
             const directRoom = res.data;
 
             // Merge into rooms list if not exists
@@ -941,10 +958,10 @@ const Chat = () => {
                                                             Projects: {u.sharedProjects.map(p => typeof p === 'string' ? p : (p.name || p.title)).join(', ')}
                                                         </p>
                                                     )}
-                                                    <p className="text-[10px] text-slate-400 truncate mt-0.5 flex items-center gap-1.5">
-                                                        {u.email && <span>{u.email}</span>}
-                                                        {u.email && u.phone && <span>•</span>}
-                                                        {u.phone && <span className="text-slate-600 font-medium">{u.phone}</span>}
+                                                    <p className="text-[11px] font-medium text-slate-700 truncate mt-0.5 flex items-center gap-1.5">
+                                                        <span className="font-semibold text-slate-800">{u.email || 'No email registered'}</span>
+                                                        {u.phone && <span className="text-slate-400">•</span>}
+                                                        {u.phone && <span className="text-slate-500">{u.phone}</span>}
                                                     </p>
                                                 </div>
                                             </div>
@@ -1024,6 +1041,11 @@ const Chat = () => {
                                                         </span>
                                                     )}
                                                 </div>
+                                                {isDirect && (room.otherUser?.email || room.email) && (
+                                                    <p className="text-[10px] text-slate-500 font-medium truncate mb-0.5">
+                                                        {room.otherUser?.email || room.email}
+                                                    </p>
+                                                )}
                                                 {room.lastMessage ? (
                                                     <div className="flex items-center gap-1.5 italic text-[10px] text-slate-400 truncate">
                                                         <span className="px-1 py-0.2 bg-slate-100 text-slate-600 rounded text-[7px] font-black uppercase">
