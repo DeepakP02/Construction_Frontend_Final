@@ -782,7 +782,6 @@ const Chat = () => {
     const handleSend = async (messageText = null, attachmentsOverride = null) => {
         const roomId = activeRoom?.id || activeRoom?._id;
         if (!roomId || activeRoom?.isArchived || activeRoom?.readOnly) return;
-        if (isSendingRef.current) return;
 
         let messageContent = messageText !== null ? messageText : newMessage;
         const rawAttachments = attachmentsOverride !== null ? attachmentsOverride : attachments;
@@ -800,8 +799,10 @@ const Chat = () => {
         
         if (!messageContent.trim()) return;
 
-        isSendingRef.current = true;
-        setIsSending(true);
+        // Reset input immediately for instant responsiveness & consecutive typing
+        if (messageText === null) setNewMessage('');
+        if (attachmentsOverride === null) setAttachments([]);
+        if (showEmojiPicker) setShowEmojiPicker(false);
 
         const tempId = 'optimistic-' + Date.now().toString() + '-' + Math.random().toString(36).slice(2, 7);
         const optimisticMsg = {
@@ -828,8 +829,6 @@ const Chat = () => {
         };
 
         setMessages(prev => [...prev, optimisticMsg]);
-        if (messageText === null) setNewMessage('');
-        if (showEmojiPicker) setShowEmojiPicker(false);
 
         try {
             const res = await api.post('/chat', {
@@ -875,7 +874,6 @@ const Chat = () => {
                     revokeLocalBlobUrl(att.url);
                 }
             });
-            setAttachments([]);
             playSound('MESSAGE_SENT');
         } catch (error) {
             console.error('Failed to send message:', error);
@@ -885,9 +883,6 @@ const Chat = () => {
                 failed: true
             } : msg));
             toast.error(error.response?.data?.message || 'Failed to deliver message. Click Retry.');
-        } finally {
-            isSendingRef.current = false;
-            setIsSending(false);
         }
     };
 
