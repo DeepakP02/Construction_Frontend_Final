@@ -126,8 +126,11 @@ const WorkerPunch = () => {
             (pos) => {
                 setLastKnownCoords(pos.coords);
             },
-            (err) => console.log('Warm-up location error:', err),
-            { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+            (err) => {
+                if (err?.code === 2 || err?.code === 3) return;
+                console.debug('Warm-up location notice:', err?.message);
+            },
+            { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
         );
 
         return () => navigator.geolocation.clearWatch(watchId);

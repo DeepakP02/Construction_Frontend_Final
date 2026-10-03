@@ -718,8 +718,11 @@ const CompanyAdminDashboard = () => {
     if (!navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => setLastKnownCoords(pos.coords),
-      (err) => console.log('Warm-up location error:', err),
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+      (err) => {
+        if (err?.code === 2 || err?.code === 3) return; // Suppress expected macOS/desktop POSITION_UNAVAILABLE
+        console.debug('Warm-up location notice:', err?.message);
+      },
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
