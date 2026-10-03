@@ -423,7 +423,7 @@ const TodoList = ({ todos, onUpdate, onDelete, currentUser, title = "My Tasks", 
 
 const CompanyAdminDashboard = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, socket } = useAuth();
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState({
     activeJobs: 0,
@@ -660,20 +660,30 @@ const CompanyAdminDashboard = () => {
   useEffect(() => {
     fetchDashboardData();
 
-    // Connect socket
-    const socketUrl = BASE_URL;
-    socketRef.current = io(socketUrl);
-    socketRef.current.emit('register_user', user);
-
-    socketRef.current.on('attendance_update', (data) => {
-      console.log('Dashboard attendance update:', data);
-      fetchDashboardData();
+    // Connect socket safely with transport fallback
+    const activeSocket = socket || io(BASE_URL, {
+      transports: ['polling', 'websocket'],
+      reconnection: true
     });
 
-    return () => {
-      if (socketRef.current) socketRef.current.disconnect();
+    if (user) {
+      activeSocket.emit('register_user', user);
+    }
+
+    const handleAttendanceUpdate = (data) => {
+      console.log('Dashboard attendance update:', data);
+      fetchDashboardData();
     };
-  }, []);
+
+    activeSocket.on('attendance_update', handleAttendanceUpdate);
+
+    return () => {
+      activeSocket.off('attendance_update', handleAttendanceUpdate);
+      if (!socket) {
+        activeSocket.disconnect();
+      }
+    };
+  }, [socket, user]);
 
   // Handle anchor scrolling for #overdue
   useEffect(() => {
