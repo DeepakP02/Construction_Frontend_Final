@@ -41,17 +41,23 @@ const CANONICAL_USER_ALIASES = {
 
 const Chat = () => {
     const { user, socket } = useAuth();
+    const userScopeKey = user?._id || user?.id || '';
+    const cacheStorageKey = userScopeKey ? `cached_chat_rooms_${userScopeKey}` : null;
+    const activeRoomStorageKey = userScopeKey ? `active_chat_room_${userScopeKey}` : null;
+
     const [activeTab, setActiveTab] = useState('PROJECT_GROUP'); // 'PROJECT_GROUP' | 'DIRECT'
     const [rooms, setRooms] = useState(() => {
+        if (!cacheStorageKey) return [];
         try {
-            const saved = localStorage.getItem('cached_chat_rooms');
+            const saved = localStorage.getItem(cacheStorageKey);
             return saved ? JSON.parse(saved) : [];
         } catch (e) {
             return [];
         }
     });
     const [activeRoom, setActiveRoomState] = useState(() => {
-        const saved = localStorage.getItem('activeChatRoom');
+        if (!activeRoomStorageKey) return null;
+        const saved = localStorage.getItem(activeRoomStorageKey);
         try {
             return saved ? JSON.parse(saved) : null;
         } catch (e) {
@@ -61,18 +67,21 @@ const Chat = () => {
 
     const setActiveRoom = (room) => {
         setActiveRoomState(room);
-        if (room) {
-            localStorage.setItem('activeChatRoom', JSON.stringify(room));
-        } else {
-            localStorage.removeItem('activeChatRoom');
+        if (activeRoomStorageKey) {
+            if (room) {
+                localStorage.setItem(activeRoomStorageKey, JSON.stringify(room));
+            } else {
+                localStorage.removeItem(activeRoomStorageKey);
+            }
         }
     };
 
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState('');
     const [loading, setLoading] = useState(() => {
+        if (!cacheStorageKey) return true;
         try {
-            const saved = localStorage.getItem('cached_chat_rooms');
+            const saved = localStorage.getItem(cacheStorageKey);
             const parsed = saved ? JSON.parse(saved) : [];
             return parsed.length === 0;
         } catch (e) {
@@ -280,23 +289,27 @@ const Chat = () => {
             const res = await api.get('/chat/rooms');
             const fetchedRooms = res.data || [];
             setRooms(fetchedRooms);
-            try {
-                localStorage.setItem('cached_chat_rooms', JSON.stringify(fetchedRooms));
-            } catch (e) {}
-
-            const savedRoom = localStorage.getItem('activeChatRoom');
-            if (savedRoom) {
+            if (cacheStorageKey) {
                 try {
-                    const parsed = JSON.parse(savedRoom);
-                    const found = fetchedRooms.find(r => String(r.id || r._id) === String(parsed.id || parsed._id));
-                    if (found) {
-                        setActiveRoomState(found);
-                        if (found.roomType === 'DIRECT') {
-                            setActiveTab('DIRECT');
+                    localStorage.setItem(cacheStorageKey, JSON.stringify(fetchedRooms));
+                } catch (e) {}
+            }
+
+            if (activeRoomStorageKey) {
+                const savedRoom = localStorage.getItem(activeRoomStorageKey);
+                if (savedRoom) {
+                    try {
+                        const parsed = JSON.parse(savedRoom);
+                        const found = fetchedRooms.find(r => String(r.id || r._id) === String(parsed.id || parsed._id));
+                        if (found) {
+                            setActiveRoomState(found);
+                            if (found.roomType === 'DIRECT') {
+                                setActiveTab('DIRECT');
+                            }
+                            return;
                         }
-                        return;
-                    }
-                } catch (e) { }
+                    } catch (e) { }
+                }
             }
 
             if (!activeRoom && fetchedRooms.length > 0) {
@@ -313,8 +326,38 @@ const Chat = () => {
     };
 
     useEffect(() => {
+        if (!userScopeKey) {
+            setRooms([]);
+            setActiveRoomState(null);
+            setLoading(true);
+            return;
+        }
+        if (cacheStorageKey) {
+            try {
+                const saved = localStorage.getItem(cacheStorageKey);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    setRooms(parsed);
+                    setLoading(parsed.length === 0);
+                } else {
+                    setRooms([]);
+                    setLoading(true);
+                }
+            } catch (e) {
+                setRooms([]);
+                setLoading(true);
+            }
+        }
+        if (activeRoomStorageKey) {
+            try {
+                const savedRoom = localStorage.getItem(activeRoomStorageKey);
+                setActiveRoomState(savedRoom ? JSON.parse(savedRoom) : null);
+            } catch (e) {
+                setActiveRoomState(null);
+            }
+        }
         fetchRooms();
-    }, [user?._id]);
+    }, [userScopeKey]);
 
     // Socket Room Joining
     useEffect(() => {
