@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { 
-    Send, Search, Paperclip, Smile, MessageSquare, X, Loader, 
-    Download, ChevronLeft, AlertCircle, Users, User, 
+import {
+    Send, Search, Paperclip, Smile, MessageSquare, X, Loader,
+    Download, ChevronLeft, AlertCircle, Users, User,
     Lock, ShieldAlert, RotateCcw, Check, Clock, UserPlus
 } from 'lucide-react';
 import api, { getServerUrl } from '../../utils/api';
@@ -42,7 +42,14 @@ const CANONICAL_USER_ALIASES = {
 const Chat = () => {
     const { user, socket } = useAuth();
     const [activeTab, setActiveTab] = useState('PROJECT_GROUP'); // 'PROJECT_GROUP' | 'DIRECT'
-    const [rooms, setRooms] = useState([]);
+    const [rooms, setRooms] = useState(() => {
+        try {
+            const saved = localStorage.getItem('cached_chat_rooms');
+            return saved ? JSON.parse(saved) : [];
+        } catch (e) {
+            return [];
+        }
+    });
     const [activeRoom, setActiveRoomState] = useState(() => {
         const saved = localStorage.getItem('activeChatRoom');
         try {
@@ -63,7 +70,15 @@ const Chat = () => {
 
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState('');
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(() => {
+        try {
+            const saved = localStorage.getItem('cached_chat_rooms');
+            const parsed = saved ? JSON.parse(saved) : [];
+            return parsed.length === 0;
+        } catch (e) {
+            return true;
+        }
+    });
     const [onlineCount, setOnlineCount] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -154,7 +169,7 @@ const Chat = () => {
                 const currentRooms = Array.isArray(prev) ? prev : [];
                 const roomIndex = currentRooms.findIndex((r) => String(r.id || r._id) === payloadRoomId);
                 if (roomIndex === -1) {
-                    fetchRooms().catch(() => {});
+                    fetchRooms().catch(() => { });
                     return currentRooms;
                 }
 
@@ -233,7 +248,7 @@ const Chat = () => {
                 if (!isFromMe) {
                     playSound('MESSAGE_RECEIVED');
                 }
-                api.put(`/chat/mark-read/${payloadRoomId}`).catch(() => {});
+                api.put(`/chat/mark-read/${payloadRoomId}`).catch(() => { });
             } else {
                 if (!isFromMe) {
                     playSound('NOTIFICATION');
@@ -242,7 +257,7 @@ const Chat = () => {
         };
 
         const handleUnreadCountUpdated = () => {
-            fetchRooms().catch(() => {});
+            fetchRooms().catch(() => { });
         };
 
         socket.on('connect', handleConnect);
@@ -265,6 +280,9 @@ const Chat = () => {
             const res = await api.get('/chat/rooms');
             const fetchedRooms = res.data || [];
             setRooms(fetchedRooms);
+            try {
+                localStorage.setItem('cached_chat_rooms', JSON.stringify(fetchedRooms));
+            } catch (e) {}
 
             const savedRoom = localStorage.getItem('activeChatRoom');
             if (savedRoom) {
@@ -278,7 +296,7 @@ const Chat = () => {
                         }
                         return;
                     }
-                } catch (e) {}
+                } catch (e) { }
             }
 
             if (!activeRoom && fetchedRooms.length > 0) {
@@ -475,7 +493,7 @@ const Chat = () => {
     const filteredParticipants = useMemo(() => {
         if (!participantSearch.trim()) return groupParticipants;
         const query = participantSearch.toLowerCase();
-        return groupParticipants.filter(p => 
+        return groupParticipants.filter(p =>
             p.fullName?.toLowerCase().includes(query) ||
             p.role?.toLowerCase().includes(query) ||
             p.email?.toLowerCase().includes(query)
@@ -718,19 +736,19 @@ const Chat = () => {
                 headers: { 'Content-Type': 'multipart/form-data' },
                 onUploadProgress: (progressEvent) => {
                     const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                    setAttachments(prev => prev.map(att => 
+                    setAttachments(prev => prev.map(att =>
                         att.id === tempId ? { ...att, progress: percentCompleted } : att
                     ));
                 }
             });
 
             const uploadedFile = res.data[0];
-            setAttachments(prev => prev.map(att => 
-                att.id === tempId ? { 
-                    ...att, 
-                    url: uploadedFile.url, 
-                    isPending: false, 
-                    progress: 100 
+            setAttachments(prev => prev.map(att =>
+                att.id === tempId ? {
+                    ...att,
+                    url: uploadedFile.url,
+                    isPending: false,
+                    progress: 100
                 } : att
             ));
         } catch (error) {
@@ -785,18 +803,18 @@ const Chat = () => {
 
         let messageContent = messageText !== null ? messageText : newMessage;
         const rawAttachments = attachmentsOverride !== null ? attachmentsOverride : attachments;
-        
+
         const validAttachments = rawAttachments.filter(att => !att.isPending);
         const finalAttachments = validAttachments.map(att => ({
             name: att.name,
             url: att.url,
             fileType: att.fileType
         }));
-        
+
         if (!messageContent.trim() && finalAttachments.length > 0) {
             messageContent = `Sent ${finalAttachments.length} attachment(s)`;
         }
-        
+
         if (!messageContent.trim()) return;
 
         // Reset input immediately for instant responsiveness & consecutive typing
@@ -940,9 +958,9 @@ const Chat = () => {
         (room.projectName && room.projectName.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
-    if (loading) return <div className="p-10 text-center uppercase font-black text-slate-300">Loading Secure Chat Channels...</div>;
+    // If no active room yet, compute default active room name/badge safely
 
-    const activeRoomName = activeRoom?.roomType === 'DIRECT' 
+    const activeRoomName = activeRoom?.roomType === 'DIRECT'
         ? (activeRoom.otherUser?.fullName || activeRoom.name)
         : (activeRoom?.projectName || activeRoom?.name);
 
@@ -958,20 +976,16 @@ const Chat = () => {
                 <div className="p-4 border-b border-slate-100 space-y-3 bg-white">
                     <div className="flex items-center justify-between">
                         <h2 className="font-black text-slate-800 uppercase tracking-tighter text-lg leading-none">COMMUNICATIONS</h2>
-                        <div className="flex items-center gap-2">
-                            <div className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold uppercase">{onlineCount} ACTIVE</div>
-                        </div>
                     </div>
 
                     {/* Top Tab Switcher */}
                     <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl gap-1">
                         <button
                             onClick={() => { setActiveTab('PROJECT_GROUP'); setSearchTerm(''); }}
-                            className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-black transition-all ${
-                                activeTab === 'PROJECT_GROUP' 
-                                    ? 'bg-white text-blue-600 shadow-sm' 
-                                    : 'text-slate-600 hover:text-slate-900'
-                            }`}
+                            className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-black transition-all ${activeTab === 'PROJECT_GROUP'
+                                ? 'bg-white text-blue-600 shadow-sm'
+                                : 'text-slate-600 hover:text-slate-900'
+                                }`}
                         >
                             <Users size={14} />
                             <span>PROJECT GROUPS</span>
@@ -983,11 +997,10 @@ const Chat = () => {
                         </button>
                         <button
                             onClick={() => { setActiveTab('DIRECT'); setSearchTerm(''); }}
-                            className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-black transition-all ${
-                                activeTab === 'DIRECT' 
-                                    ? 'bg-white text-blue-600 shadow-sm' 
-                                    : 'text-slate-600 hover:text-slate-900'
-                            }`}
+                            className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-black transition-all ${activeTab === 'DIRECT'
+                                ? 'bg-white text-blue-600 shadow-sm'
+                                : 'text-slate-600 hover:text-slate-900'
+                                }`}
                         >
                             <User size={14} />
                             <span>PRIVATE</span>
@@ -1003,27 +1016,27 @@ const Chat = () => {
                     {activeTab === 'PROJECT_GROUP' ? (
                         <div className="relative">
                             <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
-                            <input 
-                                type="text" 
-                                placeholder="Filter project channels..." 
-                                value={searchTerm} 
-                                onChange={(e) => setSearchTerm(e.target.value)} 
-                                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500" 
+                            <input
+                                type="text"
+                                placeholder="Filter project channels..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
                     ) : (
                         <div className="space-y-2">
                             <div className="relative">
                                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
-                                <input 
-                                    type="text" 
-                                    placeholder="Search contacts by name, role, email, phone..." 
-                                    value={userSearchQuery} 
-                                    onChange={(e) => setUserSearchQuery(e.target.value)} 
-                                    className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500" 
+                                <input
+                                    type="text"
+                                    placeholder="Search contacts by name, role, email, phone..."
+                                    value={userSearchQuery}
+                                    onChange={(e) => setUserSearchQuery(e.target.value)}
+                                    className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                                 />
                                 {userSearchQuery && (
-                                    <button 
+                                    <button
                                         onClick={() => setUserSearchQuery('')}
                                         className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
                                     >
@@ -1049,7 +1062,7 @@ const Chat = () => {
                                 userSearchResults.map(u => {
                                     const roleBadge = getRoleBadgeStyle(u.role);
                                     return (
-                                        <div 
+                                        <div
                                             key={u._id}
                                             onClick={() => !isStartingDirect && handleStartDirectChat(u)}
                                             className="p-3 bg-white rounded-xl border border-slate-100 hover:border-blue-300 hover:shadow-sm cursor-pointer transition-all flex items-center justify-between gap-3 group"
@@ -1084,7 +1097,7 @@ const Chat = () => {
                                                     </p>
                                                 </div>
                                             </div>
-                                            <button 
+                                            <button
                                                 disabled={isStartingDirect}
                                                 className="shrink-0 p-2 bg-blue-50 group-hover:bg-blue-600 text-blue-600 group-hover:text-white rounded-lg transition-colors cursor-pointer"
                                                 title="Start private conversation"
@@ -1110,19 +1123,17 @@ const Chat = () => {
                                     const roleBadge = isDirect && room.otherUser?.role ? getRoleBadgeStyle(room.otherUser.role) : null;
 
                                     return (
-                                        <div 
-                                            key={room.id} 
-                                            onClick={() => setActiveRoom(room)} 
-                                            className={`p-3.5 border-b border-slate-50 cursor-pointer hover:bg-white transition-all flex gap-3 ${
-                                                isSelected ? 'bg-white border-l-4 border-l-blue-600 shadow-sm' : ''
-                                            }`}
+                                        <div
+                                            key={room.id}
+                                            onClick={() => setActiveRoom(room)}
+                                            className={`p-3.5 border-b border-slate-50 cursor-pointer hover:bg-white transition-all flex gap-3 ${isSelected ? 'bg-white border-l-4 border-l-blue-600 shadow-sm' : ''
+                                                }`}
                                         >
                                             <div className="relative shrink-0">
-                                                <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-bold shadow-sm ${
-                                                    isSelected 
-                                                        ? 'bg-blue-600 text-white' 
-                                                        : isDirect ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-white border border-slate-200 text-slate-600'
-                                                }`}>
+                                                <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-bold shadow-sm ${isSelected
+                                                    ? 'bg-blue-600 text-white'
+                                                    : isDirect ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-white border border-slate-200 text-slate-600'
+                                                    }`}>
                                                     {isDirect ? (room.otherUser?.fullName?.[0] || 'U') : (room.name?.[0] || 'P')}
                                                 </div>
                                                 {room.unreadCount > 0 && (
@@ -1131,9 +1142,8 @@ const Chat = () => {
                                                     </div>
                                                 )}
                                                 {isDirect && (
-                                                    <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
-                                                        room.otherUser?.isOnline ? 'bg-emerald-500' : 'bg-slate-300'
-                                                    }`} />
+                                                    <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${room.otherUser?.isOnline ? 'bg-emerald-500' : 'bg-slate-300'
+                                                        }`} />
                                                 )}
                                             </div>
 
@@ -1179,9 +1189,21 @@ const Chat = () => {
                                         </div>
                                     );
                                 })
+                            ) : loading ? (
+                                <div className="p-4 space-y-3">
+                                    {[1, 2, 3, 4].map(n => (
+                                        <div key={n} className="flex gap-3 items-center animate-pulse">
+                                            <div className="w-11 h-11 bg-slate-200/70 rounded-xl shrink-0"></div>
+                                            <div className="flex-1 space-y-2 min-w-0">
+                                                <div className="h-3.5 bg-slate-200/70 rounded w-2/3"></div>
+                                                <div className="h-2.5 bg-slate-100 rounded w-1/2"></div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             ) : (
                                 <div className="p-8 text-center text-slate-400 text-xs">
-                                    {activeTab === 'PROJECT_GROUP' 
+                                    {activeTab === 'PROJECT_GROUP'
                                         ? 'No project group conversations available.'
                                         : 'No direct conversations yet. Use the search bar above to start private chats.'}
                                 </div>
@@ -1205,17 +1227,15 @@ const Chat = () => {
                                     <ChevronLeft size={22} />
                                 </button>
                                 <div className="relative">
-                                    <div className={`w-10 h-10 md:w-11 md:h-11 rounded-xl flex items-center justify-center font-bold text-white shadow-md ${
-                                        activeRoom.roomType === 'DIRECT' ? 'bg-indigo-600' : 'bg-blue-600'
-                                    }`}>
-                                        {activeRoom.roomType === 'DIRECT' 
-                                            ? (activeRoom.otherUser?.fullName?.[0] || 'U') 
+                                    <div className={`w-10 h-10 md:w-11 md:h-11 rounded-xl flex items-center justify-center font-bold text-white shadow-md ${activeRoom.roomType === 'DIRECT' ? 'bg-indigo-600' : 'bg-blue-600'
+                                        }`}>
+                                        {activeRoom.roomType === 'DIRECT'
+                                            ? (activeRoom.otherUser?.fullName?.[0] || 'U')
                                             : (activeRoom.name?.[0] || 'P')}
                                     </div>
                                     {activeRoom.roomType === 'DIRECT' && (
-                                        <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
-                                            activeRoom.otherUser?.isOnline ? 'bg-emerald-500' : 'bg-slate-300'
-                                        }`} />
+                                        <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${activeRoom.otherUser?.isOnline ? 'bg-emerald-500' : 'bg-slate-300'
+                                            }`} />
                                     )}
                                 </div>
                                 <div>
@@ -1333,11 +1353,10 @@ const Chat = () => {
                                                 <span className="px-1 py-0.2 bg-slate-100 text-slate-500 rounded text-[7px] font-black italic">{msg.role}</span>
                                             </div>
                                         )}
-                                        <div className={`rounded-2xl overflow-hidden shadow-sm border ${
-                                            msg.isMe 
-                                                ? 'bg-blue-600 text-white border-blue-500 rounded-br-none' 
-                                                : 'bg-white text-slate-700 border-slate-100 rounded-bl-none'
-                                        } ${msg.attachments?.some(a => isImage(a.url)) && !msg.text ? 'p-1' : 'p-3'}`}>
+                                        <div className={`rounded-2xl overflow-hidden shadow-sm border ${msg.isMe
+                                            ? 'bg-blue-600 text-white border-blue-500 rounded-br-none'
+                                            : 'bg-white text-slate-700 border-slate-100 rounded-bl-none'
+                                            } ${msg.attachments?.some(a => isImage(a.url)) && !msg.text ? 'p-1' : 'p-3'}`}>
                                             {/* Attachments rendering */}
                                             {msg.attachments?.map((att, i) => {
                                                 const isImg = isImage(att.url);
@@ -1369,13 +1388,13 @@ const Chat = () => {
                                                                         loading="lazy"
                                                                     />
                                                                     <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/10 transition-colors rounded-xl flex items-center justify-center">
-                                                                        <Download 
-                                                                            className="text-white opacity-0 group-hover/img:opacity-100 transition-opacity drop-shadow-md hover:scale-110" 
-                                                                            size={28} 
-                                                                            onClick={(e) => { 
-                                                                                e.stopPropagation(); 
-                                                                                downloadFile(att.url, att.name); 
-                                                                            }} 
+                                                                        <Download
+                                                                            className="text-white opacity-0 group-hover/img:opacity-100 transition-opacity drop-shadow-md hover:scale-110"
+                                                                            size={28}
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                downloadFile(att.url, att.name);
+                                                                            }}
                                                                         />
                                                                     </div>
                                                                 </>
@@ -1388,13 +1407,11 @@ const Chat = () => {
                                                     <div
                                                         key={i}
                                                         onClick={() => downloadFile(att.url, att.name)}
-                                                        className={`flex items-center gap-3 p-2.5 mb-2 last:mb-0 rounded-xl border cursor-pointer transition-all hover:bg-opacity-80 active:scale-[0.98] ${
-                                                            msg.isMe ? 'bg-blue-700/50 border-blue-400/30' : 'bg-slate-50 border-slate-100'
-                                                        }`}
+                                                        className={`flex items-center gap-3 p-2.5 mb-2 last:mb-0 rounded-xl border cursor-pointer transition-all hover:bg-opacity-80 active:scale-[0.98] ${msg.isMe ? 'bg-blue-700/50 border-blue-400/30' : 'bg-slate-50 border-slate-100'
+                                                            }`}
                                                     >
-                                                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                                                            msg.isMe ? 'bg-blue-500' : 'bg-white shadow-sm border border-slate-200'
-                                                        }`}>
+                                                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${msg.isMe ? 'bg-blue-500' : 'bg-white shadow-sm border border-slate-200'
+                                                            }`}>
                                                             <Paperclip size={16} className={msg.isMe ? 'text-white' : 'text-slate-400'} />
                                                         </div>
                                                         <div className="flex-1 min-w-0">
@@ -1411,27 +1428,25 @@ const Chat = () => {
                                             })}
 
                                             {msg.text && (
-                                                <p className={`text-xs md:text-sm font-semibold leading-relaxed ${
-                                                    msg.attachments?.length > 0 ? 'mt-2 border-t pt-2 ' + (msg.isMe ? 'border-blue-500/30' : 'border-slate-50') : ''
-                                                }`}>
+                                                <p className={`text-xs md:text-sm font-semibold leading-relaxed ${msg.attachments?.length > 0 ? 'mt-2 border-t pt-2 ' + (msg.isMe ? 'border-blue-500/30' : 'border-slate-50') : ''
+                                                    }`}>
                                                     {msg.text}
                                                 </p>
                                             )}
 
                                             {/* Status and timestamp footer */}
                                             <div className="flex items-center justify-end gap-1.5 mt-1">
-                                                <span className={`text-[8px] font-black uppercase tracking-widest opacity-70 ${
-                                                    msg.attachments?.some(a => isImage(a.url)) && !msg.text 
-                                                        ? 'px-2 py-0.5 bg-black/30 backdrop-blur-md rounded text-white shadow-sm' 
-                                                        : ''
-                                                }`}>
+                                                <span className={`text-[8px] font-black uppercase tracking-widest opacity-70 ${msg.attachments?.some(a => isImage(a.url)) && !msg.text
+                                                    ? 'px-2 py-0.5 bg-black/30 backdrop-blur-md rounded text-white shadow-sm'
+                                                    : ''
+                                                    }`}>
                                                     {msg.time}
                                                 </span>
                                                 {msg.isMe && (
                                                     msg.pending ? (
                                                         <Clock size={10} className="animate-spin text-blue-200" />
                                                     ) : msg.failed ? (
-                                                        <button 
+                                                        <button
                                                             onClick={() => handleRetryMessage(msg)}
                                                             className="flex items-center gap-0.5 text-[9px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-black hover:bg-red-200"
                                                             title="Failed. Click to retry."
@@ -1494,29 +1509,29 @@ const Chat = () => {
                             ) : (
                                 <div className="flex gap-2 items-center">
                                     <input type="file" ref={fileInputRef} onChange={handleFileUpload} multiple className="hidden" />
-                                    <button 
-                                        onClick={() => fileInputRef.current?.click()} 
-                                        disabled={attachments.length >= 10} 
+                                    <button
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={attachments.length >= 10}
                                         className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl border border-slate-100 transition-all"
                                     >
                                         <Paperclip size={18} />
                                     </button>
                                     <div className="flex-1 relative">
-                                        <input 
-                                            type="text" 
-                                            placeholder="Write message..." 
-                                            value={newMessage} 
-                                            onChange={(e) => setNewMessage(e.target.value)} 
+                                        <input
+                                            type="text"
+                                            placeholder="Write message..."
+                                            value={newMessage}
+                                            onChange={(e) => setNewMessage(e.target.value)}
                                             onKeyDown={(e) => {
                                                 if (e.key === 'Enter' && !e.shiftKey) {
                                                     e.preventDefault();
                                                     handleSend();
                                                 }
-                                            }} 
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-xs md:text-sm font-semibold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-inner" 
+                                            }}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-xs md:text-sm font-semibold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-inner"
                                         />
-                                        <button 
-                                            onClick={() => setShowEmojiPicker(!showEmojiPicker)} 
+                                        <button
+                                            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                                             className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition-colors"
                                         >
                                             <Smile size={18} />
@@ -1524,9 +1539,9 @@ const Chat = () => {
                                         {showEmojiPicker && (
                                             <div className="absolute bottom-full right-0 mb-3 p-3 bg-white rounded-2xl shadow-2xl border border-slate-100 grid grid-cols-6 gap-2 z-[100]">
                                                 {commonEmojis.map(e => (
-                                                    <button 
-                                                        key={e} 
-                                                        onClick={() => { setNewMessage(p => p + e); setShowEmojiPicker(false); }} 
+                                                    <button
+                                                        key={e}
+                                                        onClick={() => { setNewMessage(p => p + e); setShowEmojiPicker(false); }}
                                                         className="text-lg hover:bg-slate-50 p-1 rounded-lg transition-all active:scale-125"
                                                     >
                                                         {e}
@@ -1535,14 +1550,13 @@ const Chat = () => {
                                             </div>
                                         )}
                                     </div>
-                                    <button 
-                                        onClick={() => handleSend()} 
+                                    <button
+                                        onClick={() => handleSend()}
                                         disabled={isSending || (!newMessage.trim() && attachments.length === 0) || attachments.some(a => a.isPending)}
-                                        className={`p-2.5 md:p-3 rounded-xl shadow-md transition-all ${
-                                            !isSending && (newMessage.trim() || attachments.length > 0) && !attachments.some(a => a.isPending) 
-                                                ? 'bg-blue-600 text-white scale-105 active:scale-95' 
-                                                : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                        }`}
+                                        className={`p-2.5 md:p-3 rounded-xl shadow-md transition-all ${!isSending && (newMessage.trim() || attachments.length > 0) && !attachments.some(a => a.isPending)
+                                            ? 'bg-blue-600 text-white scale-105 active:scale-95'
+                                            : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                            }`}
                                     >
                                         <Send size={18} />
                                     </button>
@@ -1563,21 +1577,21 @@ const Chat = () => {
 
             {/* Lightbox Modal */}
             {lightboxImage && (
-                <div 
+                <div
                     className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-md animate-fade-in cursor-zoom-out"
                     onClick={() => setLightboxImage(null)}
                 >
-                    <button 
+                    <button
                         onClick={() => setLightboxImage(null)}
                         className="absolute top-6 right-6 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-2.5 rounded-full transition-all"
                     >
                         <X size={24} />
                     </button>
-                    <img 
-                        src={lightboxImage.url} 
-                        alt={lightboxImage.name} 
+                    <img
+                        src={lightboxImage.url}
+                        alt={lightboxImage.name}
                         className="max-w-[90%] max-h-[90%] object-contain rounded-lg shadow-2xl animate-zoom-in"
-                        onClick={(e) => e.stopPropagation()} 
+                        onClick={(e) => e.stopPropagation()}
                     />
                 </div>
             )}
@@ -1668,9 +1682,8 @@ const Chat = () => {
                                                         )}
                                                     </div>
                                                     <div
-                                                        className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
-                                                            p.isOnline ? 'bg-emerald-500' : 'bg-slate-300'
-                                                        }`}
+                                                        className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${p.isOnline ? 'bg-emerald-500' : 'bg-slate-300'
+                                                            }`}
                                                         title={p.isOnline ? 'Online' : 'Offline'}
                                                     />
                                                 </div>
