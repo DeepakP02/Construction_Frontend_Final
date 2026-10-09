@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Mail, Phone, Shield, User, X, Save, Trash2, Edit, CheckCircle, AlertTriangle, Eye, Loader, Lock, Briefcase, Users } from 'lucide-react';
+import { Plus, Search, Mail, Phone, Shield, User, X, Save, Trash2, Edit, CheckCircle, AlertTriangle, Eye, Loader, Lock, Briefcase, Users, UserX, UserCheck } from 'lucide-react';
 import api from '../../utils/api';
 import Toast from '../../components/Toast';
+import { useAuth } from '../../context/AuthContext';
+
 
 
 const Modal = ({ isOpen, onClose, title, children }) => {
@@ -142,19 +144,33 @@ const UserForm = ({ data, setData, onSubmit, submitLabel, isEdit = false, roleOp
 );
 
 // Status badge helper
-const StatusBadge = ({ status }) => (
-  <span className={`px-2 py-1 rounded-full text-xs font-bold flex w-fit items-center gap-1
-    ${status === 'Active' ? 'bg-emerald-100 text-emerald-700' :
-      status === 'On Site' ? 'bg-blue-100 text-blue-700' :
+const StatusBadge = ({ status, isActive }) => {
+  const isDeactivated = isActive === false;
+  const displayStatus = isDeactivated ? 'Deactivated' : (status || 'Active');
+  return (
+    <span className={`px-2 py-1 rounded-full text-xs font-bold flex w-fit items-center gap-1
+      ${isDeactivated ? 'bg-rose-50 text-rose-600 border border-rose-200' :
+        displayStatus === 'Active' ? 'bg-emerald-100 text-emerald-700' :
+        displayStatus === 'On Site' ? 'bg-blue-100 text-blue-700' :
         'bg-slate-100 text-slate-500'}`}>
-    <span className={`w-1.5 h-1.5 rounded-full ${status === 'Active' ? 'bg-emerald-500' :
-      status === 'On Site' ? 'bg-blue-500' : 'bg-slate-400'}`} />
-    {status}
-  </span>
-);
+      <span className={`w-1.5 h-1.5 rounded-full ${isDeactivated ? 'bg-rose-500' : displayStatus === 'Active' ? 'bg-emerald-500' : displayStatus === 'On Site' ? 'bg-blue-500' : 'bg-slate-400'}`} />
+      {displayStatus}
+    </span>
+  );
+};
 
 // Reusable user table
-const UserTable = ({ users, onView, onEdit, onDelete, onManagePermissions, onChangePassword, emptyMessage }) => (
+const UserTable = ({
+  users,
+  onView,
+  onEdit,
+  onDeactivate,
+  onReactivate,
+  onManagePermissions,
+  onChangePassword,
+  emptyMessage,
+  currentUser
+}) => (
   <div className="overflow-x-auto">
     <table className="w-full text-left text-sm text-slate-600">
       <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
@@ -168,60 +184,79 @@ const UserTable = ({ users, onView, onEdit, onDelete, onManagePermissions, onCha
       </thead>
       <tbody>
         {users.length > 0 ? (
-          users.map((member) => (
-            <tr key={member._id} className="border-b border-slate-100 hover:bg-slate-50 transition group">
-              <td className="px-6 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold border border-slate-200 shadow-sm">
-                    {member.fullName?.charAt(0)}
+          users.map((member) => {
+            const isSelf = currentUser?._id && member._id?.toString() === currentUser._id?.toString();
+            const canManage = (currentUser?.role === 'COMPANY_OWNER' || currentUser?.role === 'SUPER_ADMIN') && !isSelf;
+            const isDeactivated = member.isActive === false;
+
+            return (
+              <tr key={member._id} className="border-b border-slate-100 hover:bg-slate-50 transition group">
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold border border-slate-200 shadow-sm">
+                      {member.fullName?.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-900">{member.fullName}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold text-slate-900">{member.fullName}</p>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-2">
+                    <Shield size={14} className="text-slate-400" />
+                    <span className="font-medium text-xs uppercase">{member.role}</span>
                   </div>
-                </div>
-              </td>
-              <td className="px-6 py-4">
-                <div className="flex items-center gap-2">
-                  <Shield size={14} className="text-slate-400" />
-                  <span className="font-medium text-xs uppercase">{member.role}</span>
-                </div>
-              </td>
-              <td className="px-6 py-4">
-                <StatusBadge status={member.status} />
-              </td>
-              <td className="px-6 py-4">
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2 text-slate-600">
-                    <Mail size={14} className="text-slate-400" />
-                    <span className="text-sm">{member.email}</span>
+                </td>
+                <td className="px-6 py-4">
+                  <StatusBadge status={member.status} isActive={member.isActive} />
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2 text-slate-600">
+                      <Mail size={14} className="text-slate-400" />
+                      <span className="text-sm">{member.email}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-600">
+                      <Phone size={14} className="text-slate-400" />
+                      <span className="text-sm">{member.phone || '---'}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-600">
-                    <Phone size={14} className="text-slate-400" />
-                    <span className="text-sm">{member.phone || '---'}</span>
+                </td>
+                <td className="px-6 py-4 text-right">
+                  <div className="flex justify-end gap-2 text-right">
+                    <button onClick={() => onChangePassword(member)} className="p-1.5 text-emerald-500 hover:bg-emerald-50 rounded-lg transition" title="Change Password">
+                      <Lock size={18} />
+                    </button>
+                    <button onClick={() => onView(member)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition" title="View Details">
+                      <Eye size={18} />
+                    </button>
+                    <button onClick={() => onEdit(member)} className="p-1.5 text-orange-500 hover:bg-orange-50 rounded-lg transition" title="Edit Info">
+                      <Edit size={18} />
+                    </button>
+                    {canManage && (
+                      isDeactivated ? (
+                        <button
+                          onClick={() => onReactivate(member)}
+                          className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
+                          title="Reactivate Account"
+                        >
+                          <UserCheck size={18} />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => onDeactivate(member)}
+                          className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition"
+                          title="Deactivate Account"
+                        >
+                          <UserX size={18} />
+                        </button>
+                      )
+                    )}
                   </div>
-                </div>
-              </td>
-              <td className="px-6 py-4 text-right">
-                <div className="flex justify-end gap-2 text-right">
-                  {/* <button onClick={() => onManagePermissions(member)} className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition" title="Manage Permissions">
-                    <Shield size={18} />
-                  </button> */}
-                  <button onClick={() => onChangePassword(member)} className="p-1.5 text-emerald-500 hover:bg-emerald-50 rounded-lg transition" title="Change Password">
-                    <Lock size={18} />
-                  </button>
-                  <button onClick={() => onView(member)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition" title="View Details">
-                    <Eye size={18} />
-                  </button>
-                  <button onClick={() => onEdit(member)} className="p-1.5 text-orange-500 hover:bg-orange-50 rounded-lg transition" title="Edit Info">
-                    <Edit size={18} />
-                  </button>
-                  <button onClick={() => onDelete(member)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition" title="Delete User">
-                    <Trash2 size={18} />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))
+                </td>
+              </tr>
+            );
+          })
         ) : (
           <tr>
             <td colSpan="5" className="text-center py-10 text-slate-400">{emptyMessage}</td>
@@ -248,6 +283,7 @@ const emptyForm = (role) => ({
 });
 
 const Team = () => {
+  const { user: currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState('team'); // 'team' | 'clients'
 
   // Team Members state
@@ -266,8 +302,10 @@ const Team = () => {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isDeactivateOpen, setIsDeactivateOpen] = useState(false);
+  const [isReactivateOpen, setIsReactivateOpen] = useState(false);
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
+
 
   const [selectedMember, setSelectedMember] = useState(null);
   const [formData, setFormData] = useState(emptyForm('WORKER'));
@@ -494,25 +532,64 @@ const Team = () => {
     }
   };
 
-  const handleDelete = (member) => {
+  const handleOpenDeactivate = (member) => {
     const target = member?._id ? member : selectedMember;
     setSelectedMember(target);
-    setIsDeleteOpen(true);
+    setIsDeactivateOpen(true);
     setIsViewOpen(false);
   };
 
-  const confirmDelete = async () => {
+  const handleOpenReactivate = (member) => {
+    const target = member?._id ? member : selectedMember;
+    setSelectedMember(target);
+    setIsReactivateOpen(true);
+    setIsViewOpen(false);
+  };
+
+  const confirmDeactivate = async () => {
+    if (!selectedMember) return;
     try {
       setIsSubmitting(true);
-      await api.delete(`/auth/users/${selectedMember._id}`);
+      const res = await api.delete(`/auth/users/${selectedMember._id}`);
       if (activeTab === 'clients') fetchClients(); else fetchMembers();
-      setIsDeleteOpen(false);
+      setIsDeactivateOpen(false);
+      setToast({
+        message: res.data?.message || `User ${selectedMember.fullName} deactivated successfully. Historical records preserved.`,
+        type: 'success'
+      });
     } catch (error) {
-      console.error('Error deleting user:', error);
+      console.error('Error deactivating user:', error);
+      setToast({
+        message: error.response?.data?.message || 'Failed to deactivate user.',
+        type: 'error'
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const confirmReactivate = async () => {
+    if (!selectedMember) return;
+    try {
+      setIsSubmitting(true);
+      const res = await api.patch(`/auth/users/${selectedMember._id}/reactivate`);
+      if (activeTab === 'clients') fetchClients(); else fetchMembers();
+      setIsReactivateOpen(false);
+      setToast({
+        message: res.data?.message || `User ${selectedMember.fullName} reactivated successfully.`,
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('Error reactivating user:', error);
+      setToast({
+        message: error.response?.data?.message || 'Failed to reactivate user.',
+        type: 'error'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
 
   const currentRoleOptions = activeTab === 'clients' ? CLIENT_ROLE_OPTIONS : TEAM_ROLE_OPTIONS;
   const currentLoading = activeTab === 'clients' ? clientsLoading : membersLoading;
@@ -608,10 +685,12 @@ const Team = () => {
             users={currentList}
             onView={handleView}
             onEdit={handleEdit}
-            onDelete={handleDelete}
+            onDeactivate={handleOpenDeactivate}
+            onReactivate={handleOpenReactivate}
             onManagePermissions={handleManagePermissions}
             onChangePassword={handleChangePassword}
             emptyMessage={activeTab === 'team' ? 'No team members found.' : (activeTab === 'subcontractors' ? 'No subcontractors found.' : 'No clients found.')}
+            currentUser={currentUser}
           />
         )}
       </div>
@@ -651,7 +730,7 @@ const Team = () => {
               </div>
               <h3 className="text-xl font-bold text-slate-800">{selectedMember.fullName}</h3>
               <p className="text-slate-500 text-sm uppercase font-bold">{selectedMember.role}</p>
-              <StatusBadge status={selectedMember.status} />
+              <StatusBadge status={selectedMember.status} isActive={selectedMember.isActive} />
             </div>
             <div className="grid grid-cols-2 gap-4 text-left bg-slate-50 p-4 rounded-xl">
               <div>
@@ -667,10 +746,19 @@ const Team = () => {
               <button onClick={() => handleEdit(selectedMember)} className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition font-medium flex justify-center items-center gap-2">
                 <Edit size={16} /> Edit Profile
               </button>
-              <button onClick={() => handleDelete(selectedMember)} className="flex-1 bg-white border border-red-200 text-red-600 py-2 rounded-lg hover:bg-red-50 transition font-medium flex justify-center items-center gap-2">
-                <Trash2 size={16} /> Remove
-              </button>
+              {currentUser?._id !== selectedMember?._id && (currentUser?.role === 'COMPANY_OWNER' || currentUser?.role === 'SUPER_ADMIN') && (
+                selectedMember?.isActive === false ? (
+                  <button onClick={() => handleOpenReactivate(selectedMember)} className="flex-1 bg-white border border-emerald-300 text-emerald-600 py-2 rounded-lg hover:bg-emerald-50 transition font-medium flex justify-center items-center gap-2">
+                    <UserCheck size={16} /> Reactivate
+                  </button>
+                ) : (
+                  <button onClick={() => handleOpenDeactivate(selectedMember)} className="flex-1 bg-white border border-rose-200 text-rose-600 py-2 rounded-lg hover:bg-rose-50 transition font-medium flex justify-center items-center gap-2">
+                    <UserX size={16} /> Deactivate
+                  </button>
+                )
+              )}
             </div>
+
           </div>
         )}
       </Modal>
@@ -765,30 +853,86 @@ const Team = () => {
         )}
       </Modal>
 
-      {/* Delete Modal */}
-      <Modal isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} title="Remove User">
+      {/* Deactivate Modal */}
+      <Modal isOpen={isDeactivateOpen} onClose={() => setIsDeactivateOpen(false)} title="Deactivate User Account">
         <div className="text-center space-y-4">
-          <div className="bg-red-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto">
-            <AlertTriangle className="text-red-600" size={32} />
+          <div className="bg-rose-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-rose-600">
+            <AlertTriangle size={32} />
           </div>
           <div>
-            <p className="font-medium text-slate-800">Remove from system?</p>
-            <p className="text-sm text-slate-500 mt-1">
-              Are you sure you want to remove <b>{selectedMember?.fullName}</b>?<br />
-              Their access to the platform will be revoked immediately.
-            </p>
+            <p className="font-semibold text-slate-800 text-base">Deactivate account for {selectedMember?.fullName}?</p>
+            <p className="text-xs text-slate-500 font-mono mt-0.5">{selectedMember?.email} • {selectedMember?.role}</p>
+
+            <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-left text-xs text-amber-800 space-y-1.5">
+              <p className="font-semibold flex items-center gap-1.5 text-amber-900">
+                <AlertTriangle size={14} className="text-amber-600 flex-shrink-0" />
+                Access Revocation Notice
+              </p>
+              <p>• User login access to web and mobile will be revoked immediately.</p>
+              <p>• Historical records, project assignments, tasks, timesheets, and chat messages are <b>safely retained</b>.</p>
+              <p>• This user account can be reactivated at any time by a Company Owner.</p>
+            </div>
           </div>
-          <div className="flex justify-center gap-3 pt-2">
-            <button onClick={() => setIsDeleteOpen(false)} className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition font-medium">
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              onClick={() => setIsDeactivateOpen(false)}
+              disabled={isSubmitting}
+              className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition font-medium text-sm"
+            >
               Cancel
             </button>
-            <button onClick={confirmDelete} disabled={isSubmitting} className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition font-medium shadow-lg shadow-red-200 disabled:opacity-50 flex items-center gap-2">
+            <button
+              onClick={confirmDeactivate}
+              disabled={isSubmitting}
+              className="px-4 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700 transition font-medium shadow-lg shadow-rose-200 disabled:opacity-50 flex items-center gap-2 text-sm"
+            >
               {isSubmitting && <Loader size={14} className="animate-spin" />}
-              Remove Access
+              Deactivate Account
             </button>
           </div>
         </div>
       </Modal>
+
+      {/* Reactivate Modal */}
+      <Modal isOpen={isReactivateOpen} onClose={() => setIsReactivateOpen(false)} title="Reactivate User Account">
+        <div className="text-center space-y-4">
+          <div className="bg-emerald-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-emerald-600">
+            <CheckCircle size={32} />
+          </div>
+          <div>
+            <p className="font-semibold text-slate-800 text-base">Reactivate account for {selectedMember?.fullName}?</p>
+            <p className="text-xs text-slate-500 font-mono mt-0.5">{selectedMember?.email} • {selectedMember?.role}</p>
+
+            <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-left text-xs text-emerald-800 space-y-1.5">
+              <p className="font-semibold flex items-center gap-1.5 text-emerald-900">
+                <CheckCircle size={14} className="text-emerald-600 flex-shrink-0" />
+                Access Restoration Notice
+              </p>
+              <p>• User login access will be restored immediately.</p>
+              <p>• They will regain access to their assigned projects and permissions.</p>
+              <p>• This action verifies company plan seat limits before reactivating.</p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              onClick={() => setIsReactivateOpen(false)}
+              disabled={isSubmitting}
+              className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition font-medium text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmReactivate}
+              disabled={isSubmitting}
+              className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition font-medium shadow-lg shadow-emerald-200 disabled:opacity-50 flex items-center gap-2 text-sm"
+            >
+              {isSubmitting && <Loader size={14} className="animate-spin" />}
+              Reactivate Account
+            </button>
+          </div>
+        </div>
+      </Modal>
+
 
       {/* Password Reset Modal */}
       <Modal isOpen={isPasswordOpen} onClose={() => setIsPasswordOpen(false)} title="Change User Password">
